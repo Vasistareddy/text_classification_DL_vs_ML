@@ -17,27 +17,25 @@ from keras import backend as K
 import string
 from nltk.stem.snowball import SnowballStemmer
 from nltk.corpus import stopwords
-# import multiprocessing as mp
 
 stemmer = SnowballStemmer('english')
 t = str.maketrans(dict.fromkeys(string.punctuation))
 
-# p = mp.Pool(mp.cpu_count())
 MAX_NB_WORDS = 100000
 MAX_SEQUENCE_LENGTH = 1000
 EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--filename', help='data filename')
-parser.add_argument('--path', help='path where glove and required static data files needed')
-parser.add_argument('--label_count', help='output prediction label count')
+parser.add_argument('--dataset_path', help='path of the filename')
+parser.add_argument('--glove_path', help='path where glove word embeddings are kept')
+parser.add_argument('--label_count', help='classes/categories/labels count')
 parser.add_argument('--epochs', help='number of model iterations')
 parser.add_argument('--batch_size', help='data batch size in each iteration')
 args = parser.parse_args()
 
-filename = args.filename
-home_path = args.path
+file_path = args.dataset_path
+glove_path = args.path
 label_count = int(args.label_count)
 epochs = int(args.epochs)
 batch_size = int(args.batch_size)
@@ -72,14 +70,14 @@ def f1_m(y_true, y_pred):
     recall = recall_m(y_true, y_pred)
     return 2*((precision*recall)/(precision+recall+K.epsilon()))
 
-def dataset_preparation():
-    """ preparing a dataset 
-        cleaning dataset
+def dataset_preparation(filepath):
+    """ preparing a dataset by:
+        stemming and removing stop-words from data-set
         dropping N/A
         dropping duplicates
     """
-    if not 'data/{}_cleaned.csv'.format(filename) in os.listdir():
-        df = pd.read_csv("data/{}.csv".format(filename), encoding = "ISO-8859-1")
+    if '.csv' in filepath:
+        df = pd.read_csv(filepath)
         df['content'] = df['headline'] + ' ' + df['short_description']
         df['label'] = df['category']
         df = df[['content', 'label']]
@@ -89,20 +87,14 @@ def dataset_preparation():
         df['content'] = df['content'].apply(clean_text)
         df = df.dropna()
         df = df.drop_duplicates()
-        df.to_csv('data/{}_cleaned.csv'.format(filename), encoding='utf-8', index=False)
-
     else:
-        df = pd.read_csv("data/{}_cleaned.csv".format(filename), encoding = "ISO-8859-1")
-        df = df[['content', 'label']]
-        df = df.astype('str').applymap(str.lower)
-        df = df.dropna()
-        df = df.drop_duplicates()
+        raise Exception('dataset file path should be CSV and there must be data exist')
     return df
 
 def loading_embeddings():
     """ loading glove embeddings """
     embeddings_index = {}
-    f = open(home_path + 'glove.6B.100d.txt')
+    f = open(glove_path + 'glove.6B.100d.txt')
     for line in f:
         values = line.split()
         word = values[0]
@@ -211,6 +203,7 @@ def training_evaluating_model(model, x_train, y_train, x_test, y_test, x_val, y_
                   optimizer='rmsprop',
                   metrics=['acc', f1_m, precision_m, recall_m])
 
+    # Displays the network structure
     model.summary()
     # fitting the model
     model.fit(x_train, y_train, validation_data=(x_val, y_val), epochs=epochs, batch_size=batch_size)
@@ -223,21 +216,22 @@ def training_evaluating_model(model, x_train, y_train, x_test, y_test, x_val, y_
     loss, accuracy, f1_score, precision, recall = model.evaluate(x_test, y_test, verbose=0)
     return loss, accuracy, f1_score, precision, recall
 
-df = dataset_preparation()
-print(df.groupby('label').count())
+if __name__ == '__main__':
+    df = dataset_preparation('file_path')
+    print(df.groupby('label').count())
 
-print('vectorizing data')
-x_train, y_train, x_test, y_test, x_val, y_val, word_index = vectorizing_data(df)
+    print('vectorizing data')
+    x_train, y_train, x_test, y_test, x_val, y_val, word_index = vectorizing_data(df)
 
-print('Preparing embedding matrix.')
-embedding_matrix, num_words = prepare_embedding_matrix(word_index)
+    print('Preparing embedding matrix.')
+    embedding_matrix, num_words = prepare_embedding_matrix(word_index)
 
-print('model setting up')
-model = model_generation(embedding_matrix, num_words)
+    print('model setting up')
+    model = model_generation(embedding_matrix, num_words)
 
-print('calculating metrics')
-loss, accuracy, f1_score, precision, recall = training_evaluating_model(model, x_train, y_train, x_test, y_test, x_val, y_val)
+    print('calculating metrics')
+    loss, accuracy, f1_score, precision, recall = training_evaluating_model(model, x_train, y_train, x_test, y_test, x_val, y_val)
 
-print("loss -- {} \naccuracy -- {} \nf1_score -- {} \nprecision -- {} \nrecall -- {} \n".format(float(format(loss,'.2f')), \
-    float(format(accuracy*100,'.2f')), float(format(f1_score*100,'.2f')), float(format(precision*100,'.2f')), float(format(recall*100,'.2f'))))
+    print("loss -- {} \naccuracy -- {} \nf1_score -- {} \nprecision -- {} \nrecall -- {} \n".format(float(format(loss,'.2f')), \
+        float(format(accuracy*100,'.2f')), float(format(f1_score*100,'.2f')), float(format(precision*100,'.2f')), float(format(recall*100,'.2f'))))
 
