@@ -40,8 +40,9 @@ def dataset_preparation(filepath):
     """
     if '.csv' in filepath:
         df = pd.read_csv(filepath)
-        df['content'] = df['headline'] + ' ' + df['short_description']
-        df['label'] = df['category']
+        if 'headline' in df.columns:
+            df['content'] = df['headline'] + ' ' + df['short_description']
+            df['label'] = df['category']
         df = df[['content', 'label']]
         df = df.astype('str').applymap(str.lower)
         df = df.applymap(str.strip).replace(r"[^a-z0-9 ]+", '')
